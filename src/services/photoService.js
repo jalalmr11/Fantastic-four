@@ -46,8 +46,47 @@ function createUniquePath(category, file) {
 }
 
 /**
+ * Helper to safely parse image URLs (handles single string or JSON array)
+ */
+export function parsePhotoUrls(imageUrl) {
+  if (!imageUrl) return [];
+  if (Array.isArray(imageUrl)) return imageUrl;
+  if (typeof imageUrl === 'string') {
+    if (imageUrl.startsWith('[')) {
+      try {
+        const parsed = JSON.parse(imageUrl);
+        if (Array.isArray(parsed)) return parsed;
+      } catch {
+        // fallback
+      }
+    }
+    return [imageUrl];
+  }
+  return [];
+}
+
+/**
+ * Helper to safely parse storage paths
+ */
+export function parseStoragePaths(storagePath) {
+  if (!storagePath) return [];
+  if (Array.isArray(storagePath)) return storagePath;
+  if (typeof storagePath === 'string') {
+    if (storagePath.startsWith('[')) {
+      try {
+        const parsed = JSON.parse(storagePath);
+        if (Array.isArray(parsed)) return parsed;
+      } catch {
+        // fallback
+      }
+    }
+    return [storagePath];
+  }
+  return [];
+}
+
+/**
  * Fetches all photos or photos by category from Supabase.
- * Gracefully handles databases that do or do not have a category column.
  */
 export async function getPhotos(category = null) {
   if (!isSupabaseConfigured()) {
@@ -91,11 +130,15 @@ export async function getPhotos(category = null) {
 }
 
 /**
- * Uploads a photo to Supabase Storage and records metadata in the database.
+ * GALLERY UPLOAD: Image-only (One image, no title/description)
  */
-export async function uploadPhoto({ file, title, description = '', category = 'gallery', userId }) {
+export async function uploadGalleryPhoto({ file, userId }) {
   if (!isSupabaseConfigured()) {
-    return { data: null, error: new Error('Supabase is not configured. Please add your credentials to .env.local') };
+    return { data: null, error: new Error('Supabase is not configured.') };
+  }
+
+  if (!file) {
+    return { data: null, error: new Error('Please select an image file to upload.') };
   }
 
   const validation = validateImageFile(file);
@@ -103,7 +146,7 @@ export async function uploadPhoto({ file, title, description = '', category = 'g
     return { data: null, error: new Error(validation.error) };
   }
 
-  const storagePath = createUniquePath(category, file);
+  const storagePath = createUniquePath('gallery', file);
 
   try {
     // 1. Upload to Supabase Storage
@@ -128,17 +171,15 @@ export async function uploadPhoto({ file, title, description = '', category = 'g
       throw new Error('Failed to retrieve public URL from Supabase Storage.');
     }
 
-    // 3. Insert record into database
+    // 3. Insert record into database (image only)
     const payload = {
-      title: title.trim(),
-      description: (description || '').trim(),
+      title: 'Gallery Photo',
+      description: '',
+      category: 'gallery',
       image_url: urlData.publicUrl,
       storage_path: storagePath,
       created_by: userId || null,
     };
-    if (category) {
-      payload.category = category;
-    }
 
     let { data: photoData, error: dbError } = await supabase
       .from('photos')
@@ -146,80 +187,237 @@ export async function uploadPhoto({ file, title, description = '', category = 'g
       .select()
       .single();
 
-    // If category column does not exist in user's table, retry without category
     if (dbError && dbError.message && dbError.message.includes('category')) {
       delete payload.category;
-      const retry = await supabase
-        .from('photos')
-        .insert(payload)
-        .select()
-        .single();
+      const retry = await supabase.from('photos').insert(payload).select().single();
       photoData = retry.data;
       dbError = retry.error;
     }
 
     if (dbError) {
-      // Clean up orphaned file from storage if DB insert fails
       await supabase.storage.from(BUCKET_NAME).remove([storagePath]);
       throw new Error(`Database record creation failed: ${dbError.message}`);
     }
 
     return { data: photoData, error: null };
   } catch (err) {
-    console.error('Upload photo error:', err.message);
+    console.error('Upload gallery photo error:', err.message);
     return { data: null, error: err };
   }
 }
 
 /**
- * Updates an existing photo's metadata (title, description, category).
+ * MEMORIES UPLOAD: 1 to 4 images + ONE shared description
  */
-export async function updatePhotoMetadata(id, { title, description, category }) {
+export async function uploadMemoriesGroup({ files, description = '', userId }) {
+  if (!isSupabaseConfigured()) {
+    return { data: null, error: new Error('Supabase is not configured.') };
+  }
+
+  if (!files || files.length === 0) {
+    return { data: null, error: new Error('Please select at least 1 image for this memory.') };
+  }
+
+  if (files.length > 4) {
+    return { data: null, error: new Error('Memories allows a maximum of 4 images.') };
+  }
+
+  // Validate all files
+  for (let i = 0; i < files.length; i++) {
+    const val = validateImageFile(files[i]);
+    if (!val.valid) {
+      return { data: null, error: new Error(`Image ${i + 1}: ${val.error}`) };
+    }
+  }
+
+  const uploadedPaths = [];
+  const publicUrls = [];
+
+  try {
+    // 1. Upload all 1-4 images to Supabase Storage
+    for (const file of files) {
+      const storagePath = createUniquePath('memories', file);
+      const { error: uploadError } = await supabase.storage
+        .from(BUCKET_NAME)
+        .upload(storagePath, file, {
+          cacheControl: '3600',
+          upsert: false,
+          contentType: file.type,
+        });
+
+      if (uploadError) {
+        throw new Error(`Failed to upload ${file.name}: ${uploadError.message}`);
+      }
+
+      uploadedPaths.push(storagePath);
+      const { data: urlData } = supabase.storage.from(BUCKET_NAME).getPublicUrl(storagePath);
+      publicUrls.push(urlData.publicUrl);
+    }
+
+    // 2. Insert ONE Memories record with all image URLs and ONE shared description
+    const payload = {
+      title: 'Memory',
+      description: (description || '').trim(),
+      category: 'memories',
+      image_url: JSON.stringify(publicUrls),
+      storage_path: JSON.stringify(uploadedPaths),
+      created_by: userId || null,
+    };
+
+    let { data: memoryData, error: dbError } = await supabase
+      .from('photos')
+      .insert(payload)
+      .select()
+      .single();
+
+    if (dbError && dbError.message && dbError.message.includes('category')) {
+      delete payload.category;
+      const retry = await supabase.from('photos').insert(payload).select().single();
+      memoryData = retry.data;
+      dbError = retry.error;
+    }
+
+    if (dbError) {
+      // Cleanup all uploaded files
+      if (uploadedPaths.length > 0) {
+        await supabase.storage.from(BUCKET_NAME).remove(uploadedPaths);
+      }
+      throw new Error(`Failed to save memory record: ${dbError.message}`);
+    }
+
+    return { data: memoryData, error: null };
+  } catch (err) {
+    if (uploadedPaths.length > 0) {
+      await supabase.storage.from(BUCKET_NAME).remove(uploadedPaths);
+    }
+    console.error('Upload memories error:', err.message);
+    return { data: null, error: err };
+  }
+}
+
+/**
+ * Updates a Memories group's shared description
+ */
+export async function updateMemoryDescription(id, description) {
   if (!isSupabaseConfigured()) {
     return { data: null, error: new Error('Supabase is not configured.') };
   }
 
   try {
-    const payload = {
-      title: title.trim(),
-      description: (description || '').trim(),
-    };
-    if (category) {
-      payload.category = category;
-    }
-
-    let { data, error } = await supabase
+    const { data, error } = await supabase
       .from('photos')
-      .update(payload)
+      .update({
+        description: (description || '').trim(),
+        updated_at: new Date().toISOString(),
+      })
       .eq('id', id)
       .select()
       .single();
 
-    // If category column doesn't exist, retry without it
-    if (error && error.message && error.message.includes('category')) {
-      delete payload.category;
-      const retry = await supabase
-        .from('photos')
-        .update(payload)
-        .eq('id', id)
-        .select()
-        .single();
-      data = retry.data;
-      error = retry.error;
-    }
-
     if (error) throw error;
     return { data, error: null };
   } catch (err) {
-    console.error('Error updating photo metadata:', err.message);
+    console.error('Error updating memory description:', err.message);
     return { data: null, error: err };
   }
 }
 
 /**
- * Replaces an existing photo with a newly uploaded file.
+ * Updates a Memories group: manages images (keep, add, remove) and updates shared description.
+ * Enforces maximum of 4 images total and 1 shared description.
  */
-export async function replacePhotoFile(id, { newFile, oldStoragePath, category }) {
+export async function updateMemoriesGroup(id, {
+  keepUrls = [],
+  keepPaths = [],
+  newFiles = [],
+  removedPaths = [],
+  description = '',
+}) {
+  if (!isSupabaseConfigured()) {
+    return { data: null, error: new Error('Supabase is not configured.') };
+  }
+
+  const totalCount = keepUrls.length + newFiles.length;
+  if (totalCount === 0) {
+    return { data: null, error: new Error('Memories group must have at least 1 image.') };
+  }
+  if (totalCount > 4) {
+    return { data: null, error: new Error('Memories allows a maximum of 4 images.') };
+  }
+
+  // Validate new files
+  for (let i = 0; i < newFiles.length; i++) {
+    const val = validateImageFile(newFiles[i]);
+    if (!val.valid) {
+      return { data: null, error: new Error(val.error) };
+    }
+  }
+
+  const newlyUploadedPaths = [];
+  const finalUrls = [...keepUrls];
+  const finalPaths = [...keepPaths];
+
+  try {
+    // 1. Upload new files if any
+    for (const file of newFiles) {
+      const storagePath = createUniquePath('memories', file);
+      const { error: uploadError } = await supabase.storage
+        .from(BUCKET_NAME)
+        .upload(storagePath, file, {
+          cacheControl: '3600',
+          upsert: false,
+          contentType: file.type,
+        });
+
+      if (uploadError) {
+        throw new Error(`Failed to upload ${file.name}: ${uploadError.message}`);
+      }
+
+      newlyUploadedPaths.push(storagePath);
+      const { data: urlData } = supabase.storage.from(BUCKET_NAME).getPublicUrl(storagePath);
+      finalUrls.push(urlData.publicUrl);
+      finalPaths.push(storagePath);
+    }
+
+    // 2. Update DB record
+    const { data: updatedRecord, error: dbError } = await supabase
+      .from('photos')
+      .update({
+        description: (description || '').trim(),
+        image_url: JSON.stringify(finalUrls),
+        storage_path: JSON.stringify(finalPaths),
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (dbError) {
+      if (newlyUploadedPaths.length > 0) {
+        await supabase.storage.from(BUCKET_NAME).remove(newlyUploadedPaths);
+      }
+      throw new Error(`Failed to update memory: ${dbError.message}`);
+    }
+
+    // 3. Delete removed files from storage
+    if (removedPaths && removedPaths.length > 0) {
+      await supabase.storage.from(BUCKET_NAME).remove(removedPaths);
+    }
+
+    return { data: updatedRecord, error: null };
+  } catch (err) {
+    if (newlyUploadedPaths.length > 0) {
+      await supabase.storage.from(BUCKET_NAME).remove(newlyUploadedPaths);
+    }
+    console.error('Update memories group error:', err.message);
+    return { data: null, error: err };
+  }
+}
+
+/**
+ * Replaces a single Gallery image file
+ */
+export async function replaceGalleryPhoto(id, { newFile, oldStoragePath }) {
   if (!isSupabaseConfigured()) {
     return { data: null, error: new Error('Supabase is not configured.') };
   }
@@ -229,7 +427,7 @@ export async function replacePhotoFile(id, { newFile, oldStoragePath, category }
     return { data: null, error: new Error(validation.error) };
   }
 
-  const newStoragePath = createUniquePath(category || 'gallery', newFile);
+  const newStoragePath = createUniquePath('gallery', newFile);
 
   try {
     // 1. Upload new image
@@ -256,37 +454,34 @@ export async function replacePhotoFile(id, { newFile, oldStoragePath, category }
       .update({
         image_url: urlData.publicUrl,
         storage_path: newStoragePath,
+        updated_at: new Date().toISOString(),
       })
       .eq('id', id)
       .select()
       .single();
 
     if (dbError) {
-      // Revert newly uploaded file
       await supabase.storage.from(BUCKET_NAME).remove([newStoragePath]);
       throw new Error(`Failed to update photo record: ${dbError.message}`);
     }
 
-    // 4. Remove old image from storage if it exists
+    // 4. Remove old image from storage
     if (oldStoragePath) {
-      const { error: removeError } = await supabase.storage
-        .from(BUCKET_NAME)
-        .remove([oldStoragePath]);
-
-      if (removeError) {
-        console.warn('Could not remove previous image from storage:', removeError.message);
+      const paths = parseStoragePaths(oldStoragePath);
+      if (paths.length > 0) {
+        await supabase.storage.from(BUCKET_NAME).remove(paths);
       }
     }
 
     return { data: updatedRecord, error: null };
   } catch (err) {
-    console.error('Replace photo error:', err.message);
+    console.error('Replace gallery photo error:', err.message);
     return { data: null, error: err };
   }
 }
 
 /**
- * Deletes a photo from both Supabase Storage and Database.
+ * Deletes a photo or memories group from both Supabase Storage and Database.
  */
 export async function deletePhoto(id, storagePath) {
   if (!isSupabaseConfigured()) {
@@ -304,14 +499,17 @@ export async function deletePhoto(id, storagePath) {
       throw new Error(`Failed to delete record: ${dbError.message}`);
     }
 
-    // 2. Remove file from storage
+    // 2. Remove file(s) from storage (handles single path or array)
     if (storagePath) {
-      const { error: storageError } = await supabase.storage
-        .from(BUCKET_NAME)
-        .remove([storagePath]);
+      const paths = parseStoragePaths(storagePath);
+      if (paths.length > 0) {
+        const { error: storageError } = await supabase.storage
+          .from(BUCKET_NAME)
+          .remove(paths);
 
-      if (storageError) {
-        console.warn('File record removed but storage deletion had an issue:', storageError.message);
+        if (storageError) {
+          console.warn('Storage deletion warning:', storageError.message);
+        }
       }
     }
 

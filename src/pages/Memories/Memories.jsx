@@ -4,7 +4,7 @@ import MemoryCard from '../../components/MemoryCard/MemoryCard';
 import ArabicReminder from '../../components/ArabicReminder/ArabicReminder';
 import defaultMemories from '../../data/memories';
 import reminders from '../../data/reminders';
-import { getPhotos } from '../../services/photoService';
+import { getPhotos, parsePhotoUrls } from '../../services/photoService';
 import './Memories.css';
 
 export default function Memories() {
@@ -18,7 +18,7 @@ export default function Memories() {
           id: p.id,
           title: p.title,
           description: p.description,
-          photos: [p.image_url],
+          photos: parsePhotoUrls(p.image_url),
           date: p.created_at ? new Date(p.created_at).toLocaleDateString() : '',
           location: '',
         }));
