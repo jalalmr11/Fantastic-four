@@ -37,3 +37,6 @@ Thumbs.db
 # Local untracked photos
 src/assets/images/gallery19.jpeg
 
+
+.vercel
+.env*

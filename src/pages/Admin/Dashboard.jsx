@@ -99,8 +99,11 @@ export default function AdminDashboard() {
     return photos.filter((p) => {
       if (p.category === 'gallery') return true;
       if (p.category === 'memories') return false;
-      // Fallback if category column doesn't exist: check if image_url is a JSON array
-      return !p.image_url?.startsWith('[');
+      // Fallback if category column doesn't exist: check storage_path and JSON array image_url
+      return (
+        p.storage_path?.startsWith('gallery/') ||
+        (!p.image_url?.startsWith('[') && !p.storage_path?.startsWith('memories/'))
+      );
     });
   }, [photos]);
 
@@ -108,8 +111,11 @@ export default function AdminDashboard() {
     return photos.filter((p) => {
       if (p.category === 'memories') return true;
       if (p.category === 'gallery') return false;
-      // Fallback: JSON array image_url belongs to memories
-      return p.image_url?.startsWith('[');
+      // Fallback: check storage_path or JSON array image_url
+      return (
+        p.storage_path?.startsWith('memories/') ||
+        p.image_url?.startsWith('[')
+      );
     });
   }, [photos]);
 

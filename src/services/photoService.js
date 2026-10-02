@@ -105,13 +105,37 @@ export async function getPhotos(category = null) {
         return { data: data || [], error: null };
       }
 
-      // If category column does not exist in schema, query without category filter
+      // If category column does not exist in schema, query without category filter and strictly filter in-memory
       if (error.message && error.message.includes('category')) {
         const fallback = await supabase
           .from('photos')
           .select('*')
           .order('created_at', { ascending: false });
-        return { data: fallback.data || [], error: fallback.error };
+
+        if (fallback.error) {
+          return { data: [], error: fallback.error };
+        }
+
+        const filtered = (fallback.data || []).filter((p) => {
+          if (p.category) {
+            return p.category === category;
+          }
+          if (category === 'gallery') {
+            return (
+              p.storage_path?.startsWith('gallery/') ||
+              (!p.image_url?.startsWith('[') && !p.storage_path?.startsWith('memories/'))
+            );
+          }
+          if (category === 'memories') {
+            return (
+              p.storage_path?.startsWith('memories/') ||
+              p.image_url?.startsWith('[')
+            );
+          }
+          return false;
+        });
+
+        return { data: filtered, error: null };
       }
       throw error;
     }

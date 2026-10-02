@@ -92,6 +92,7 @@ CREATE TABLE IF NOT EXISTS public.photos (
 );
 
 -- Index for performant querying by category and creation time
+ALTER TABLE public.photos ADD COLUMN IF NOT EXISTS category TEXT NOT NULL DEFAULT 'gallery' CHECK (category IN ('gallery', 'memories', 'members', 'general'));
 CREATE INDEX IF NOT EXISTS idx_photos_category_created ON public.photos (category, created_at DESC);
 
 -- Enable RLS on photos
