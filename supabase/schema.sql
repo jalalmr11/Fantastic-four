@@ -29,28 +29,26 @@ AS $$
   );
 $$;
 
--- Profiles RLS policies:
--- Authenticated users can view their own profile
+-- Profiles RLS policies (Non-recursive):
+DROP POLICY IF EXISTS "Admins can view all profiles" ON public.profiles;
+DROP POLICY IF EXISTS "Admins can update profiles" ON public.profiles;
+DROP POLICY IF EXISTS "Users can view own profile" ON public.profiles;
+DROP POLICY IF EXISTS "Users can update own profile" ON public.profiles;
+
+-- 1. Authenticated users can view their own profile (ZERO recursion)
 CREATE POLICY "Users can view own profile"
   ON public.profiles
   FOR SELECT
   TO authenticated
   USING (id = auth.uid());
 
--- Admins can view all profiles
-CREATE POLICY "Admins can view all profiles"
-  ON public.profiles
-  FOR SELECT
-  TO authenticated
-  USING (public.is_admin());
-
--- Only admins can update profiles
-CREATE POLICY "Admins can update profiles"
+-- 2. Authenticated users can update their own profile (ZERO recursion)
+CREATE POLICY "Users can update own profile"
   ON public.profiles
   FOR UPDATE
   TO authenticated
-  USING (public.is_admin())
-  WITH CHECK (public.is_admin());
+  USING (id = auth.uid())
+  WITH CHECK (id = auth.uid());
 
 -- Trigger to create a profile automatically when a new user signs up in auth.users
 CREATE OR REPLACE FUNCTION public.handle_new_user()
@@ -99,6 +97,7 @@ ALTER TABLE public.photos ENABLE ROW LEVEL SECURITY;
 
 -- Photos RLS Policies:
 -- 1. Public can view (SELECT) all photos
+DROP POLICY IF EXISTS "Public can view photos" ON public.photos;
 CREATE POLICY "Public can view photos"
   ON public.photos
   FOR SELECT
@@ -106,6 +105,7 @@ CREATE POLICY "Public can view photos"
   USING (true);
 
 -- 2. Only authenticated admins can insert photos
+DROP POLICY IF EXISTS "Admins can insert photos" ON public.photos;
 CREATE POLICY "Admins can insert photos"
   ON public.photos
   FOR INSERT
@@ -113,6 +113,7 @@ CREATE POLICY "Admins can insert photos"
   WITH CHECK (public.is_admin());
 
 -- 3. Only authenticated admins can update photos
+DROP POLICY IF EXISTS "Admins can update photos" ON public.photos;
 CREATE POLICY "Admins can update photos"
   ON public.photos
   FOR UPDATE
@@ -121,6 +122,7 @@ CREATE POLICY "Admins can update photos"
   WITH CHECK (public.is_admin());
 
 -- 4. Only authenticated admins can delete photos
+DROP POLICY IF EXISTS "Admins can delete photos" ON public.photos;
 CREATE POLICY "Admins can delete photos"
   ON public.photos
   FOR DELETE

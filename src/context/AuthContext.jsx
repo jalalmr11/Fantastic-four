@@ -14,54 +14,64 @@ export function AuthProvider({ children }) {
     if (!isSupabaseConfigured()) {
       setProfile(null);
       setIsAdmin(false);
-      return null;
+      return { profile: null, error: null };
     }
 
     try {
-      // 1. Get verified authenticated user from Supabase Auth
-      const { data: userData, error: userError } = await supabase.auth.getUser();
-      if (userError || !userData?.user) {
-        setUser(null);
-        setProfile(null);
-        setIsAdmin(false);
-        return null;
+      // 1. Get authenticated user
+      let authUserId = explicitUserId;
+      if (!authUserId) {
+        const { data: userData, error: userError } = await supabase.auth.getUser();
+        if (userError || !userData?.user) {
+          setUser(null);
+          setProfile(null);
+          setIsAdmin(false);
+          return { profile: null, error: userError || new Error('No active user session') };
+        }
+        authUserId = userData.user.id;
+        setUser(userData.user);
       }
 
-      const authUser = userData.user;
-      const targetId = explicitUserId || authUser.id;
-
       // 2. Query public.profiles using the authenticated user's ID
-      // Note: We only select 'id, role' to be completely compatible with any profile table schema
+      // Only select 'id, role' to be completely compatible with any profile table schema
       const { data: profileData, error: profileError } = await supabase
         .from('profiles')
         .select('id, role')
-        .eq('id', targetId)
+        .eq('id', authUserId)
         .maybeSingle();
 
       if (profileError) {
-        console.error('Error fetching user profile from database:', profileError.message);
+        console.error('Database query error on profiles:', profileError.message);
         setProfile(null);
         setIsAdmin(false);
-        return null;
+        return { profile: null, error: profileError };
       }
 
-      // 3. Verify profile exists, profiles.id === authUser.id, and check role
-      if (profileData && profileData.id === authUser.id) {
+      if (!profileData) {
+        setProfile(null);
+        setIsAdmin(false);
+        return {
+          profile: null,
+          error: new Error(`No row found in public.profiles for user ID: ${authUserId}`),
+        };
+      }
+
+      // 3. Verify profile exists, profiles.id === authUserId, and check role
+      if (profileData.id === authUserId) {
         const isUserAdmin = profileData.role === 'admin';
-        setUser(authUser);
         setProfile(profileData);
         setIsAdmin(isUserAdmin);
-        return profileData;
+        return { profile: profileData, error: null };
       }
 
       setProfile(null);
       setIsAdmin(false);
-      return null;
+      return { profile: null, error: new Error('Profile ID does not match authenticated user ID.') };
     } catch (err) {
       console.error('Unexpected error in fetchProfile:', err);
       setProfile(null);
       setIsAdmin(false);
-      return null;
+      return { profile: null, error: err };
     }
   }, []);
 
@@ -77,6 +87,7 @@ export function AuthProvider({ children }) {
       if (!isMounted) return;
       setSession(initialSession);
       if (initialSession?.user) {
+        setUser(initialSession.user);
         fetchProfile(initialSession.user.id).finally(() => {
           if (isMounted) setLoading(false);
         });
@@ -98,6 +109,7 @@ export function AuthProvider({ children }) {
         setSession(newSession);
 
         if (newSession?.user) {
+          setUser(newSession.user);
           await fetchProfile(newSession.user.id);
         } else {
           setUser(null);
@@ -134,13 +146,24 @@ export function AuthProvider({ children }) {
         return { error: new Error('No user returned from authentication.') };
       }
 
+      // Set user and session immediately
+      setSession(authData.session);
+      setUser(authData.user);
+
       // 2. Fetch authenticated profile and verify role
-      const userProfile = await fetchProfile(authData.user.id);
+      const { profile: userProfile, error: profileErr } = await fetchProfile(authData.user.id);
+
+      if (profileErr) {
+        return {
+          data: authData,
+          error: profileErr,
+        };
+      }
 
       if (!userProfile) {
         return {
           data: authData,
-          error: new Error('Account authenticated, but no profile was found in public.profiles for this user ID. Please check your Supabase profiles table.')
+          error: new Error(`Account authenticated (${authData.user.email}), but no profile was found in public.profiles for ID: ${authData.user.id}`),
         };
       }
 
@@ -148,12 +171,10 @@ export function AuthProvider({ children }) {
         return {
           data: authData,
           profile: userProfile,
-          error: new Error('Access denied: Your account is authenticated, but its role in public.profiles is not "admin".')
+          error: new Error(`Access denied: Your account role is "${userProfile.role}". Administrator access requires role = "admin".`),
         };
       }
 
-      setSession(authData.session);
-      setUser(authData.user);
       setProfile(userProfile);
       setIsAdmin(true);
 
