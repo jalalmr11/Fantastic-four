@@ -171,11 +171,34 @@
   opacity: 0.4;
 }
 
-/* ===== TOUCH DEVICES ===== */
-@media (hover: none) {
+/* ===== TOUCH & MOBILE DEVICES ===== */
+@media (max-width: 480px) {
+  .memory-card__content {
+    padding: 16px 18px 20px;
+  }
+
+  .memory-card__title {
+    font-size: 1.1rem;
+    margin-bottom: 6px;
+  }
+
+  .memory-card__desc {
+    font-size: 0.84rem;
+    line-height: 1.65;
+  }
+
   .memory-card__arrow {
-    opacity: 0.8;
+    opacity: 0.9;
     width: 34px;
     height: 34px;
   }
 }
+
+@media (hover: none) {
+  .memory-card__arrow {
+    opacity: 0.85;
+    width: 36px;
+    height: 36px;
+  }
+}
+

@@ -85,26 +85,46 @@
 @media (max-width: 1024px) {
   .about-values {
     grid-template-columns: repeat(2, 1fr);
+    gap: 16px;
   }
 
   .about-members {
     grid-template-columns: repeat(2, 1fr);
+    gap: 20px;
   }
 }
 
 @media (max-width: 640px) {
   .about-values {
     grid-template-columns: 1fr;
+    gap: 14px;
+  }
+
+  .about-value-card {
+    padding: 24px 18px;
   }
 
   .about-members {
     grid-template-columns: 1fr;
-    max-width: 360px;
+    width: 100%;
+    max-width: 340px;
     margin-left: auto;
     margin-right: auto;
   }
 
   .page-hero {
-    padding: 130px 0 60px;
+    padding: 120px 0 50px;
   }
 }
+
+@media (max-width: 480px) {
+  .about-intro__text {
+    font-size: 0.95rem;
+    line-height: 1.75;
+  }
+
+  .page-hero {
+    padding: 100px 0 40px;
+  }
+}
+

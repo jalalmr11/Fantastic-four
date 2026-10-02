@@ -96,3 +96,18 @@
 .member-card:hover .member-card__glow {
   opacity: 1;
 }
+
+@media (max-width: 480px) {
+  .member-card__info {
+    padding: 20px 18px;
+  }
+
+  .member-card__name {
+    font-size: 1.3rem;
+  }
+
+  .member-card__intro {
+    font-size: 0.8rem;
+  }
+}
+

@@ -650,3 +650,28 @@
   }
 }
 
+@media (max-width: 380px) {
+  .admin-header__title {
+    font-size: 1.25rem;
+  }
+
+  .admin-tab-btn {
+    padding: 12px 14px;
+    font-size: 0.86rem;
+  }
+
+  .admin-memories-preview-grid {
+    gap: 8px;
+  }
+
+  .admin-memory-group-card__thumb {
+    width: 64px;
+    height: 64px;
+  }
+
+  .admin-modal-box {
+    padding: 16px 12px;
+  }
+}
+
+
