@@ -1,0 +1,31 @@
+.memories-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 40px;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.memories-count {
+  font-size: 0.85rem;
+  color: var(--text-tertiary);
+}
+
+.memories-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 28px;
+}
+
+@media (max-width: 1024px) {
+  .memories-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 640px) {
+  .memories-grid {
+    grid-template-columns: 1fr;
+  }
+}
