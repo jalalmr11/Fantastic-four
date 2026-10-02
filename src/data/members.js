@@ -30,10 +30,11 @@ const members = [
       { id: 'jalal-g3', src: jalalGal3, alt: 'Jalal photo 3' },
     ],
     socials: {
-      github: '#',
-      linkedin: '#',
-      instagram: '#',
-      email: 'jalal@example.com',
+      github: 'https://github.com/jalalmr11',
+      linkedin: 'https://www.linkedin.com/in/jalalmr/',
+      instagram: 'https://www.instagram.com/mhmd_jalal._/',
+      portfolio: 'https://jalaljl-portfolio.netlify.app/',
+      email: 'jalalmoh1179@gmail.com',
     },
   },
   {
@@ -48,10 +49,10 @@ const members = [
       { id: 'nawfal-g3', src: nawfalGal3, alt: 'Nawfal photo 3' },
     ],
     socials: {
-      github: '#',
-      linkedin: '#',
-      instagram: '#',
-      email: 'nawfal@example.com',
+      github: 'https://github.com/nawfal50',
+      linkedin: 'https://www.linkedin.com/in/nawfal26',
+      instagram: 'https://www.instagram.com/_the.nawfl_/',
+      email: 'nawfalabdulkadar2007@gmail.com',
     },
   },
   {
@@ -66,10 +67,10 @@ const members = [
       { id: 'hashmi-g3', src: hashmiGal3, alt: 'Hashmi photo 3' },
     ],
     socials: {
-      github: '#',
-      linkedin: '#',
-      instagram: '#',
-      email: 'hashmi@example.com',
+      github: 'https://github.com/Mohamedhashmi-07',
+      linkedin: 'https://www.linkedin.com/in/hashmi81/',
+      instagram: 'https://instagram.com/_.hazmiii._8',
+      email: 'mohamedhashmi41@gmail.com',
     },
   },
   {
@@ -84,10 +85,10 @@ const members = [
       { id: 'irshak-g3', src: irshakGal3, alt: 'Irshak Hassan photo 3' },
     ],
     socials: {
-      github: '#',
-      linkedin: '#',
-      instagram: '#',
-      email: 'irshakhassan@example.com',
+      github: 'https://github.com/Irshak-Hassan',
+      linkedin: 'https://www.linkedin.com/in/irshak-hassan',
+      instagram: 'https://www.instagram.com/irshak_73/?hl=en',
+      email: 'irshakhassan17@gmail.com',
     },
   },
 ];
