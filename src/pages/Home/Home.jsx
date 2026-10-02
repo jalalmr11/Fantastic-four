@@ -27,7 +27,10 @@ export default function Home() {
         <div className="container hero__content" ref={heroRef}>
           <div className={`hero__text reveal ${heroVisible ? 'visible' : ''}`}>
             <p className="hero__label">Welcome to</p>
-            <h1 className="hero__title">FANTASTIC FOUR</h1>
+            <h1 className="hero__title">
+              <span className="hero__title-line hero__title-line--1">FANTASTIC</span>
+              <span className="hero__title-line hero__title-line--2">FOUR</span>
+            </h1>
             <p className="hero__subtitle">Four People. One Friendship. Countless Memories.</p>
             <p className="hero__desc">
               We created this space to preserve the moments, memories and stories
