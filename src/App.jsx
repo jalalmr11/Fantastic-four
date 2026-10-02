@@ -42,6 +42,14 @@ function AppContent() {
             </AdminRoute>
           }
         />
+        <Route
+          path="/admin/dashboard"
+          element={
+            <AdminRoute>
+              <AdminDashboard />
+            </AdminRoute>
+          }
+        />
 
         <Route path="/404" element={<NotFound />} />
         <Route path="*" element={<NotFound />} />
