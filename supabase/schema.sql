@@ -42,13 +42,15 @@ CREATE POLICY "Users can view own profile"
   TO authenticated
   USING (id = auth.uid());
 
--- 2. Authenticated users can update their own profile (ZERO recursion)
-CREATE POLICY "Users can update own profile"
+-- 2. Only admins can update profiles (prevents normal users from elevating role)
+DROP POLICY IF EXISTS "Users can update own profile" ON public.profiles;
+DROP POLICY IF EXISTS "Only admins can update profiles" ON public.profiles;
+CREATE POLICY "Only admins can update profiles"
   ON public.profiles
   FOR UPDATE
   TO authenticated
-  USING (id = auth.uid())
-  WITH CHECK (id = auth.uid());
+  USING (public.is_admin())
+  WITH CHECK (public.is_admin());
 
 -- Trigger to create a profile automatically when a new user signs up in auth.users
 CREATE OR REPLACE FUNCTION public.handle_new_user()

@@ -27,8 +27,13 @@ dist-ssr
 !.vscode/extensions.json
 .idea
 .DS_Store
+Thumbs.db
 *.suo
 *.ntvs*
 *.njsproj
 *.sln
 *.sw?
+
+# Local untracked photos
+src/assets/images/gallery19.jpeg
+
