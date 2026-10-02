@@ -47,6 +47,7 @@ function createUniquePath(category, file) {
 
 /**
  * Fetches all photos or photos by category from Supabase.
+ * Gracefully handles databases that do or do not have a category column.
  */
 export async function getPhotos(category = null) {
   if (!isSupabaseConfigured()) {
@@ -54,16 +55,33 @@ export async function getPhotos(category = null) {
   }
 
   try {
-    let query = supabase
+    if (category && category !== 'all') {
+      const { data, error } = await supabase
+        .from('photos')
+        .select('*')
+        .eq('category', category)
+        .order('created_at', { ascending: false });
+
+      if (!error) {
+        return { data: data || [], error: null };
+      }
+
+      // If category column does not exist in schema, query without category filter
+      if (error.message && error.message.includes('category')) {
+        const fallback = await supabase
+          .from('photos')
+          .select('*')
+          .order('created_at', { ascending: false });
+        return { data: fallback.data || [], error: fallback.error };
+      }
+      throw error;
+    }
+
+    const { data, error } = await supabase
       .from('photos')
       .select('*')
       .order('created_at', { ascending: false });
 
-    if (category && category !== 'all') {
-      query = query.eq('category', category);
-    }
-
-    const { data, error } = await query;
     if (error) throw error;
     return { data: data || [], error: null };
   } catch (err) {
@@ -111,18 +129,34 @@ export async function uploadPhoto({ file, title, description = '', category = 'g
     }
 
     // 3. Insert record into database
-    const { data: photoData, error: dbError } = await supabase
+    const payload = {
+      title: title.trim(),
+      description: (description || '').trim(),
+      image_url: urlData.publicUrl,
+      storage_path: storagePath,
+      created_by: userId || null,
+    };
+    if (category) {
+      payload.category = category;
+    }
+
+    let { data: photoData, error: dbError } = await supabase
       .from('photos')
-      .insert({
-        title: title.trim(),
-        description: (description || '').trim(),
-        category,
-        image_url: urlData.publicUrl,
-        storage_path: storagePath,
-        created_by: userId || null,
-      })
+      .insert(payload)
       .select()
       .single();
+
+    // If category column does not exist in user's table, retry without category
+    if (dbError && dbError.message && dbError.message.includes('category')) {
+      delete payload.category;
+      const retry = await supabase
+        .from('photos')
+        .insert(payload)
+        .select()
+        .single();
+      photoData = retry.data;
+      dbError = retry.error;
+    }
 
     if (dbError) {
       // Clean up orphaned file from storage if DB insert fails
@@ -146,17 +180,33 @@ export async function updatePhotoMetadata(id, { title, description, category }) 
   }
 
   try {
-    const { data, error } = await supabase
+    const payload = {
+      title: title.trim(),
+      description: (description || '').trim(),
+    };
+    if (category) {
+      payload.category = category;
+    }
+
+    let { data, error } = await supabase
       .from('photos')
-      .update({
-        title: title.trim(),
-        description: (description || '').trim(),
-        category,
-        updated_at: new Date().toISOString(),
-      })
+      .update(payload)
       .eq('id', id)
       .select()
       .single();
+
+    // If category column doesn't exist, retry without it
+    if (error && error.message && error.message.includes('category')) {
+      delete payload.category;
+      const retry = await supabase
+        .from('photos')
+        .update(payload)
+        .eq('id', id)
+        .select()
+        .single();
+      data = retry.data;
+      error = retry.error;
+    }
 
     if (error) throw error;
     return { data, error: null };
@@ -206,7 +256,6 @@ export async function replacePhotoFile(id, { newFile, oldStoragePath, category }
       .update({
         image_url: urlData.publicUrl,
         storage_path: newStoragePath,
-        updated_at: new Date().toISOString(),
       })
       .eq('id', id)
       .select()

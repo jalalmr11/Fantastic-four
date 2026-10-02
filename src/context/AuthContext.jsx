@@ -9,32 +9,56 @@ export function AuthProvider({ children }) {
   const [isAdmin, setIsAdmin] = useState(false);
   const [loading, setLoading] = useState(() => isSupabaseConfigured());
 
-  const fetchProfile = useCallback(async (userId) => {
-    if (!userId || !isSupabaseConfigured()) {
+  // Fetches and verifies user profile using auth.getUser() and profiles.id
+  const fetchProfile = useCallback(async (explicitUserId = null) => {
+    if (!isSupabaseConfigured()) {
       setProfile(null);
       setIsAdmin(false);
       return null;
     }
 
     try {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('id, email, role, created_at, updated_at')
-        .eq('id', userId)
-        .maybeSingle();
-
-      if (error) {
-        console.error('Error fetching user profile:', error.message);
+      // 1. Get verified authenticated user from Supabase Auth
+      const { data: userData, error: userError } = await supabase.auth.getUser();
+      if (userError || !userData?.user) {
+        setUser(null);
         setProfile(null);
         setIsAdmin(false);
         return null;
       }
 
-      setProfile(data);
-      setIsAdmin(data?.role === 'admin');
-      return data;
+      const authUser = userData.user;
+      const targetId = explicitUserId || authUser.id;
+
+      // 2. Query public.profiles using the authenticated user's ID
+      // Note: We only select 'id, role' to be completely compatible with any profile table schema
+      const { data: profileData, error: profileError } = await supabase
+        .from('profiles')
+        .select('id, role')
+        .eq('id', targetId)
+        .maybeSingle();
+
+      if (profileError) {
+        console.error('Error fetching user profile from database:', profileError.message);
+        setProfile(null);
+        setIsAdmin(false);
+        return null;
+      }
+
+      // 3. Verify profile exists, profiles.id === authUser.id, and check role
+      if (profileData && profileData.id === authUser.id) {
+        const isUserAdmin = profileData.role === 'admin';
+        setUser(authUser);
+        setProfile(profileData);
+        setIsAdmin(isUserAdmin);
+        return profileData;
+      }
+
+      setProfile(null);
+      setIsAdmin(false);
+      return null;
     } catch (err) {
-      console.error('Unexpected error fetching profile:', err);
+      console.error('Unexpected error in fetchProfile:', err);
       setProfile(null);
       setIsAdmin(false);
       return null;
@@ -48,16 +72,18 @@ export function AuthProvider({ children }) {
 
     let isMounted = true;
 
-    // Get initial session
+    // Get current session and verify authenticated user
     supabase.auth.getSession().then(({ data: { session: initialSession } }) => {
       if (!isMounted) return;
       setSession(initialSession);
-      setUser(initialSession?.user ?? null);
       if (initialSession?.user) {
         fetchProfile(initialSession.user.id).finally(() => {
           if (isMounted) setLoading(false);
         });
       } else {
+        setUser(null);
+        setProfile(null);
+        setIsAdmin(false);
         setLoading(false);
       }
     }).catch((err) => {
@@ -65,16 +91,16 @@ export function AuthProvider({ children }) {
       if (isMounted) setLoading(false);
     });
 
-    // Listen for auth changes
+    // Listen for auth state changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (_event, newSession) => {
         if (!isMounted) return;
         setSession(newSession);
-        setUser(newSession?.user ?? null);
 
         if (newSession?.user) {
           await fetchProfile(newSession.user.id);
         } else {
+          setUser(null);
           setProfile(null);
           setIsAdmin(false);
         }
@@ -94,21 +120,44 @@ export function AuthProvider({ children }) {
     }
 
     try {
-      const { data, error } = await supabase.auth.signInWithPassword({
+      // 1. Authenticate with Supabase Auth
+      const { data: authData, error: signInError } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
 
-      if (error) {
-        return { error };
+      if (signInError) {
+        return { error: signInError };
       }
 
-      if (data?.user) {
-        const userProfile = await fetchProfile(data.user.id);
-        return { data, profile: userProfile };
+      if (!authData?.user) {
+        return { error: new Error('No user returned from authentication.') };
       }
 
-      return { data };
+      // 2. Fetch authenticated profile and verify role
+      const userProfile = await fetchProfile(authData.user.id);
+
+      if (!userProfile) {
+        return {
+          data: authData,
+          error: new Error('Account authenticated, but no profile was found in public.profiles for this user ID. Please check your Supabase profiles table.')
+        };
+      }
+
+      if (userProfile.role !== 'admin') {
+        return {
+          data: authData,
+          profile: userProfile,
+          error: new Error('Access denied: Your account is authenticated, but its role in public.profiles is not "admin".')
+        };
+      }
+
+      setSession(authData.session);
+      setUser(authData.user);
+      setProfile(userProfile);
+      setIsAdmin(true);
+
+      return { data: authData, profile: userProfile };
     } catch (err) {
       return { error: err };
     }
@@ -125,9 +174,7 @@ export function AuthProvider({ children }) {
   };
 
   const refreshProfile = async () => {
-    if (user?.id) {
-      await fetchProfile(user.id);
-    }
+    await fetchProfile();
   };
 
   return (
