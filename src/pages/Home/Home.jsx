@@ -62,10 +62,10 @@ export default function Home() {
           <div className="home-about__grid">
             <div className="home-about__visual">
               <div className="home-about__card home-about__card--1">
-                <img src={aboutus1} alt="About us photo 1" />
+                <img src={aboutus1} alt="About us photo 1" loading="lazy" decoding="async" />
               </div>
               <div className="home-about__card home-about__card--2">
-                <img src={aboutus2} alt="About us photo 2" />
+                <img src={aboutus2} alt="About us photo 2" loading="lazy" decoding="async" />
               </div>
             </div>
             <div className="home-about__text">

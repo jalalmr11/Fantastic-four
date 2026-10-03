@@ -18,7 +18,7 @@ export default function MemberCard({ member, index = 0 }) {
       <Link to={`/members/${member.id}`} className="member-card tilt-card" ref={tiltRef} aria-label={`View ${member.name}'s profile`}>
         <div className="member-card__image">
           {member.photo ? (
-            <img src={member.photo} alt={`Photo of ${member.name}`} loading="lazy" />
+            <img src={member.photo} alt={`Photo of ${member.name}`} loading="lazy" decoding="async" />
           ) : (
             <div className="image-placeholder member-card__placeholder">
               <PlaceholderIcon />

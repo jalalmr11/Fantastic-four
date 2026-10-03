@@ -20,7 +20,13 @@ function GalleryItem({ image, index, onClick }) {
         aria-label={image.alt || `View photo ${index + 1}`}
       >
         {image.src ? (
-          <img src={image.src} alt={image.alt || ''} loading="lazy" />
+          <img
+            src={image.src}
+            alt={image.alt || ''}
+            loading={index < 4 ? 'eager' : 'lazy'}
+            fetchPriority={index < 2 ? 'high' : 'auto'}
+            decoding="async"
+          />
         ) : (
           <div className="image-placeholder gallery-item__placeholder">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" width="36" height="36">

@@ -1,26 +1,50 @@
 import { useEffect, useRef, useState } from 'react';
 
+// Shared IntersectionObserver instances per threshold for optimal performance
+const observerPool = new Map();
+
+function getSharedObserver(threshold) {
+  let entry = observerPool.get(threshold);
+  if (!entry) {
+    const callbacks = new Map();
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((change) => {
+          if (change.isIntersecting) {
+            const cb = callbacks.get(change.target);
+            if (cb) {
+              cb();
+              callbacks.delete(change.target);
+              observer.unobserve(change.target);
+            }
+          }
+        });
+      },
+      { threshold }
+    );
+    entry = { observer, callbacks };
+    observerPool.set(threshold, entry);
+  }
+  return entry;
+}
+
 export function useScrollReveal(threshold = 0.15) {
   const ref = useRef(null);
   const [isVisible, setIsVisible] = useState(false);
 
   useEffect(() => {
     const el = ref.current;
-    if (!el) return;
+    if (!el || isVisible) return;
 
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (entry.isIntersecting) {
-          setIsVisible(true);
-          observer.unobserve(el);
-        }
-      },
-      { threshold }
-    );
-
+    const { observer, callbacks } = getSharedObserver(threshold);
+    callbacks.set(el, () => setIsVisible(true));
     observer.observe(el);
-    return () => observer.disconnect();
-  }, [threshold]);
+
+    return () => {
+      callbacks.delete(el);
+      observer.unobserve(el);
+    };
+  }, [threshold, isVisible]);
 
   return [ref, isVisible];
 }
@@ -32,30 +56,59 @@ export function useTilt(intensity = 15) {
     const el = ref.current;
     if (!el) return;
 
+    // Skip on touch screens or users with reduced motion
+    const canHover = window.matchMedia('(hover: hover) and (pointer: fine)').matches;
     const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    if (prefersReducedMotion) return;
+    if (!canHover || prefersReducedMotion) return;
+
+    let rect = null;
+    let rafId = null;
+
+    const handleEnter = () => {
+      rect = el.getBoundingClientRect();
+    };
 
     const handleMove = (e) => {
-      const rect = el.getBoundingClientRect();
-      const x = e.clientX - rect.left;
-      const y = e.clientY - rect.top;
-      const centerX = rect.width / 2;
-      const centerY = rect.height / 2;
+      if (!rect) {
+        rect = el.getBoundingClientRect();
+      }
 
-      const rotateX = ((y - centerY) / centerY) * -intensity;
-      const rotateY = ((x - centerX) / centerX) * intensity;
+      if (rafId) return;
 
-      el.style.transform = `perspective(1000px) rotateX(${rotateX}deg) rotateY(${rotateY}deg) scale3d(1.02, 1.02, 1.02)`;
+      const clientX = e.clientX;
+      const clientY = e.clientY;
+
+      rafId = requestAnimationFrame(() => {
+        rafId = null;
+        if (!rect) return;
+        const x = clientX - rect.left;
+        const y = clientY - rect.top;
+        const centerX = rect.width / 2;
+        const centerY = rect.height / 2;
+
+        const rotateX = ((y - centerY) / centerY) * -intensity;
+        const rotateY = ((x - centerX) / centerX) * intensity;
+
+        el.style.transform = `perspective(1000px) rotateX(${rotateX.toFixed(2)}deg) rotateY(${rotateY.toFixed(2)}deg) scale3d(1.02, 1.02, 1.02)`;
+      });
     };
 
     const handleLeave = () => {
+      if (rafId) {
+        cancelAnimationFrame(rafId);
+        rafId = null;
+      }
+      rect = null;
       el.style.transform = 'perspective(1000px) rotateX(0) rotateY(0) scale3d(1, 1, 1)';
     };
 
-    el.addEventListener('mousemove', handleMove);
-    el.addEventListener('mouseleave', handleLeave);
+    el.addEventListener('mouseenter', handleEnter, { passive: true });
+    el.addEventListener('mousemove', handleMove, { passive: true });
+    el.addEventListener('mouseleave', handleLeave, { passive: true });
 
     return () => {
+      if (rafId) cancelAnimationFrame(rafId);
+      el.removeEventListener('mouseenter', handleEnter);
       el.removeEventListener('mousemove', handleMove);
       el.removeEventListener('mouseleave', handleLeave);
     };

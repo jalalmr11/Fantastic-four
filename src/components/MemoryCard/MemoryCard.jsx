@@ -130,7 +130,14 @@ export default function MemoryCard({ memory, index = 0 }) {
                 style={{ transform: `translateX(-${currentSlide * 100}%)` }}
               >
                 {photos.map((photo, i) => (
-                  <img key={i} src={photo} alt={`${memory.title} - ${i + 1}`} loading="lazy" draggable="false" />
+                  <img
+                    key={i}
+                    src={photo}
+                    alt={`${memory.title} - ${i + 1}`}
+                    loading={index < 3 && i === 0 ? 'eager' : 'lazy'}
+                    decoding="async"
+                    draggable="false"
+                  />
                 ))}
               </div>
 

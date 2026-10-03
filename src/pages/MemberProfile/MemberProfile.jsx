@@ -44,7 +44,7 @@ function GalleryItem({ image, index, onClick }) {
   return (
     <button ref={tiltRef} className="profile-gallery-item tilt-card" onClick={onClick} aria-label={`View photo ${index + 1}`}>
       {image.src ? (
-        <img src={image.src} alt={image.alt || ''} loading="lazy" />
+        <img src={image.src} alt={image.alt || ''} loading="lazy" decoding="async" />
       ) : (
         <div className="image-placeholder profile-gallery-item__placeholder">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" width="28" height="28">
@@ -94,7 +94,7 @@ export default function MemberProfile() {
           <div className="profile-hero__layout">
             <div className="profile-hero__avatar">
               {member.photo ? (
-                <img src={member.photo} alt={`Photo of ${member.name}`} />
+                <img src={member.photo} alt={`Photo of ${member.name}`} fetchPriority="high" decoding="async" />
               ) : (
                 <div className="image-placeholder profile-hero__placeholder">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" width="64" height="64">

@@ -85,12 +85,28 @@ export function parseStoragePaths(storagePath) {
   return [];
 }
 
+// In-memory cache for getPhotos to prevent redundant network roundtrips on route navigation
+const photosCache = new Map();
+const CACHE_TTL_MS = 60_000; // 60 seconds
+
+export function clearPhotoCache() {
+  photosCache.clear();
+}
+
 /**
  * Fetches all photos or photos by category from Supabase.
  */
-export async function getPhotos(category = null) {
+export async function getPhotos(category = null, forceRefresh = false) {
   if (!isSupabaseConfigured()) {
     return { data: [], error: null };
+  }
+
+  const cacheKey = category || 'all';
+  const cached = photosCache.get(cacheKey);
+  const now = Date.now();
+
+  if (!forceRefresh && cached && now - cached.timestamp < CACHE_TTL_MS) {
+    return { data: cached.data, error: null };
   }
 
   try {
@@ -102,7 +118,9 @@ export async function getPhotos(category = null) {
         .order('created_at', { ascending: false });
 
       if (!error) {
-        return { data: data || [], error: null };
+        const result = data || [];
+        photosCache.set(cacheKey, { data: result, timestamp: now });
+        return { data: result, error: null };
       }
 
       // If category column does not exist in schema, query without category filter and strictly filter in-memory
@@ -135,6 +153,7 @@ export async function getPhotos(category = null) {
           return false;
         });
 
+        photosCache.set(cacheKey, { data: filtered, timestamp: now });
         return { data: filtered, error: null };
       }
       throw error;
@@ -146,7 +165,9 @@ export async function getPhotos(category = null) {
       .order('created_at', { ascending: false });
 
     if (error) throw error;
-    return { data: data || [], error: null };
+    const result = data || [];
+    photosCache.set(cacheKey, { data: result, timestamp: now });
+    return { data: result, error: null };
   } catch (err) {
     console.error('Error fetching photos:', err.message);
     return { data: [], error: err };
@@ -177,7 +198,7 @@ export async function uploadGalleryPhoto({ file, userId }) {
     const { error: uploadError } = await supabase.storage
       .from(BUCKET_NAME)
       .upload(storagePath, file, {
-        cacheControl: '3600',
+        cacheControl: '31536000',
         upsert: false,
         contentType: file.type,
       });
@@ -223,6 +244,7 @@ export async function uploadGalleryPhoto({ file, userId }) {
       throw new Error(`Database record creation failed: ${dbError.message}`);
     }
 
+    clearPhotoCache();
     return { data: photoData, error: null };
   } catch (err) {
     console.error('Upload gallery photo error:', err.message);
@@ -264,7 +286,7 @@ export async function uploadMemoriesGroup({ files, description = '', userId }) {
       const { error: uploadError } = await supabase.storage
         .from(BUCKET_NAME)
         .upload(storagePath, file, {
-          cacheControl: '3600',
+          cacheControl: '31536000',
           upsert: false,
           contentType: file.type,
         });
@@ -309,6 +331,7 @@ export async function uploadMemoriesGroup({ files, description = '', userId }) {
       throw new Error(`Failed to save memory record: ${dbError.message}`);
     }
 
+    clearPhotoCache();
     return { data: memoryData, error: null };
   } catch (err) {
     if (uploadedPaths.length > 0) {
@@ -388,7 +411,7 @@ export async function updateMemoriesGroup(id, {
       const { error: uploadError } = await supabase.storage
         .from(BUCKET_NAME)
         .upload(storagePath, file, {
-          cacheControl: '3600',
+          cacheControl: '31536000',
           upsert: false,
           contentType: file.type,
         });
@@ -428,6 +451,7 @@ export async function updateMemoriesGroup(id, {
       await supabase.storage.from(BUCKET_NAME).remove(removedPaths);
     }
 
+    clearPhotoCache();
     return { data: updatedRecord, error: null };
   } catch (err) {
     if (newlyUploadedPaths.length > 0) {
@@ -458,7 +482,7 @@ export async function replaceGalleryPhoto(id, { newFile, oldStoragePath }) {
     const { error: uploadError } = await supabase.storage
       .from(BUCKET_NAME)
       .upload(newStoragePath, newFile, {
-        cacheControl: '3600',
+        cacheControl: '31536000',
         upsert: false,
         contentType: newFile.type,
       });
@@ -497,6 +521,7 @@ export async function replaceGalleryPhoto(id, { newFile, oldStoragePath }) {
       }
     }
 
+    clearPhotoCache();
     return { data: updatedRecord, error: null };
   } catch (err) {
     console.error('Replace gallery photo error:', err.message);
@@ -537,6 +562,7 @@ export async function deletePhoto(id, storagePath) {
       }
     }
 
+    clearPhotoCache();
     return { success: true, error: null };
   } catch (err) {
     console.error('Delete photo error:', err.message);

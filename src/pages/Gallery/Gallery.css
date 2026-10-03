@@ -21,6 +21,8 @@
 .gallery-masonry > div {
   break-inside: avoid;
   margin-bottom: 16px;
+  content-visibility: auto;
+  contain-intrinsic-size: 280px;
 }
 
 .gallery-item {
